@@ -13,9 +13,17 @@ A lightweight Python developer tool for local AI agent execution recording and t
 
 ## Installation
 
+Traceloop is published on PyPI. You can install it globally via pip:
+
 ```bash
-git clone https://github.com/yourusername/traceloop-python.git
-cd traceloop-python
+pip install traceloop-local
+```
+
+Alternatively, you can clone the [GitHub Repository](https://github.com/Rishab87/traceloop) and install from source:
+
+```bash
+git clone https://github.com/Rishab87/traceloop.git
+cd traceloop
 pip install -e .
 ```
 
