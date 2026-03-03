@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Traceloop UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .run-item {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .run-item:hover {
+            background-color: #f3f4f6;
+        }
+
+        .run-active {
+            background-color: #e5e7eb;
+            border-left: 4px solid #4f46e5;
+        }
+
+        .step-success {
+            border-left-color: #22c55e;
+        }
+
+        .step-failed {
+            border-left-color: #ef4444;
+            background-color: #fef2f2;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-50 h-screen overflow-hidden flex flex-col font-sans">
+
+    <header class="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 rounded bg-indigo-600 flex items-center justify-center text-white font-bold text-xl">T
+            </div>
+            <h1 class="text-xl font-semibold text-gray-900">Traceloop</h1>
+        </div>
+        <div class="text-sm text-gray-500">Local Execution Viewer</div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar: List of Runs -->
+        <aside class="w-1/3 max-w-sm bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+            <div class="p-4 border-b border-gray-100 bg-gray-50">
+                <h2 class="text-sm font-semibold text-gray-600 uppercase tracking-wider">Recent Runs</h2>
+            </div>
+            <div class="overflow-y-auto flex-1 p-2 space-y-1" id="runs-list">
+                {% for run in runs %}
+                <div class="run-item rounded-lg p-3 border border-transparent {% if loop.first %}run-active{% endif %}"
+                    onclick="loadRun('{{ run.run_id }}', this)">
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="font-mono text-sm font-semibold text-gray-900">#{{ run.run_id }}</span>
+                        {% if run.status == 'success' %}
+                        <span class="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Success</span>
+                        {% elif run.status == 'failed' %}
+                        <span class="px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Failed</span>
+                        {% else %}
+                        <span
+                            class="px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">Running</span>
+                        {% endif %}
+                    </div>
+                    <div class="text-xs text-gray-500">{{ run.started_at }}</div>
+                    <div class="text-xs text-gray-400 mt-1">{{ run.steps|length }} steps recorded</div>
+                </div>
+                {% else %}
+                <div class="text-center p-4 text-sm text-gray-500">No runs found.</div>
+                {% endfor %}
+            </div>
+        </aside>
+
+        <!-- Main Content: Timeline -->
+        <main class="flex-1 overflow-y-auto bg-gray-50 p-6">
+            <div id="timeline-container" class="max-w-3xl mx-auto space-y-6">
+                <!-- Populated by JS -->
+                <div class="text-center text-gray-500 mt-20">Select a run from the sidebar to view its timeline.</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        async function loadRun(runId, element) {
+            // Update active state in sidebar
+            document.querySelectorAll('.run-item').forEach(el => el.classList.remove('run-active'));
+            if (element) element.classList.add('run-active');
+
+            const container = document.getElementById('timeline-container');
+            container.innerHTML = '<div class="text-center text-gray-500 mt-10">Loading timeline...</div>';
+
+            try {
+                const res = await fetch(`/api/runs/${runId}`);
+                if (!res.ok) throw new Error('Run not found');
+                const run = await res.json();
+                renderTimeline(run);
+            } catch (err) {
+                container.innerHTML = `<div class="text-red-500 text-center mt-10">Error loading run: ${err.message}</div>`;
+            }
+        }
+
+        function renderTimeline(run) {
+            const container = document.getElementById('timeline-container');
+            let html = `
+                <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-2xl font-bold font-mono text-gray-900">Run ${run.run_id}</h2>
+                        <span class="px-3 py-1 rounded-full text-sm font-medium ${run.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${run.status.toUpperCase()}</span>
+                    </div>
+                    <div class="text-sm text-gray-500">Started: ${run.started_at}</div>
+                </div>
+                <div class="relative border-l-2 border-gray-200 ml-4 space-y-6 pb-8">
+            `;
+
+            if (!run.steps || run.steps.length === 0) {
+                html += '<div class="pl-6 text-gray-500 italic">No steps recorded for this run.</div>';
+            }
+
+            (run.steps || []).forEach((step, idx) => {
+                const isFailed = step.status === 'failed';
+                const statusColor = isFailed ? 'text-red-500 bg-red-100 border-red-500' : 'text-green-500 bg-green-100 border-green-500';
+
+                html += `
+                    <div class="relative pl-8">
+                        <div class="absolute -left-[9px] top-1.5 w-4 h-4 rounded-full border-2 bg-white ${isFailed ? 'border-red-500' : 'border-green-500'}"></div>
+                        <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden ${isFailed ? 'border-red-300' : ''}">
+                            <!-- Header -->
+                            <div class="px-4 py-3 bg-gray-50 border-b border-gray-100 flex justify-between items-center cursor-pointer hover:bg-gray-100 transition-colors" onclick="toggleDetails('step-${step.step_id}')">
+                                <div class="flex items-center gap-3">
+                                    <span class="font-mono text-xs font-bold text-gray-400">#${step.step_id}</span>
+                                    <span class="font-semibold text-gray-900">${step.name}</span>
+                                </div>
+                                <div class="flex items-center gap-4 text-sm">
+                                    <span class="text-gray-500 font-mono">${step.duration_ms || 0}ms</span>
+                                    <svg class="w-4 h-4 text-gray-400 transform transition-transform" id="icon-step-${step.step_id}" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
+                            </div>
+                            
+                            <!-- Expanded Body -->
+                            <div id="step-${step.step_id}" class="hidden">
+                                <div class="p-4 space-y-4">
+                                    <div>
+                                        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Inputs</div>
+                                        <pre class="bg-gray-800 text-gray-100 p-3 rounded-md text-xs font-mono overflow-auto">${JSON.stringify(step.inputs, null, 2)}</pre>
+                                    </div>
+                                    
+                                    ${step.outputs ? `
+                                    <div>
+                                        <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Outputs</div>
+                                        <pre class="bg-gray-800 text-gray-100 p-3 rounded-md text-xs font-mono overflow-auto">${JSON.stringify(step.outputs, null, 2)}</pre>
+                                    </div>
+                                    ` : ''}
+
+                                    ${isFailed ? `
+                                    <div class="bg-red-50 border border-red-200 rounded-md p-4 mt-4">
+                                        <div class="flex items-center gap-2 text-red-800 font-semibold mb-2">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                            Error Details
+                                        </div>
+                                        <div class="text-red-700 text-sm font-mono mb-2">${step.error}</div>
+                                        <pre class="text-xs text-red-600 overflow-auto bg-red-100/50 p-2 rounded">${step.traceback}</pre>
+                                        
+                                        <div class="mt-4 pt-4 border-t border-red-200">
+                                            <button class="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors" onclick="alert('In a real shell, run: traceloop replay ${run.run_id} --from-step ${step.step_id}')">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                Replay from Step ${step.step_id} in CLI
+                                            </button>
+                                        </div>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            container.innerHTML = html;
+
+            // Expand the failed step automatically
+            const failedStep = run.steps.find(s => s.status === 'failed');
+            if (failedStep) {
+                toggleDetails(`step-${failedStep.step_id}`);
+            }
+        }
+
+        function toggleDetails(id) {
+            const el = document.getElementById(id);
+            const icon = document.getElementById('icon-' + id);
+            if (el.classList.contains('hidden')) {
+                el.classList.remove('hidden');
+                icon.classList.add('rotate-180');
+            } else {
+                el.classList.add('hidden');
+                icon.classList.remove('rotate-180');
+            }
+        }
+
+        // Initialize first run if present by simulating a click on the first item
+        window.addEventListener('DOMContentLoaded', () => {
+            const firstRunEl = document.querySelector('.run-item');
+            if (firstRunEl) {
+                // The onclick handler is defined on this element, so we can just click it
+                firstRunEl.click();
+            }
+        });
+    </script>
+</body>
+
+</html>
