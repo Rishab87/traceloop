@@ -7,7 +7,7 @@ with open(os.path.join(os.path.dirname(__file__), "README.md"), "r", encoding="u
 
 setup(
     name="traceloop-local",
-    version="0.1.0",
+    version="0.1.1",
     description="A lightweight local AI agent execution recorder and replayer.",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -15,7 +15,9 @@ setup(
     author_email="kumarjharishab@gmail.com",
     url="https://github.com/Rishab87/traceloop",
     packages=find_packages(),
-    include_package_data=True,
+    package_data={
+        "traceloop": ["templates/*"],
+    },
     install_requires=[
         "flask>=3.0.0",
         "click>=8.0.0",
